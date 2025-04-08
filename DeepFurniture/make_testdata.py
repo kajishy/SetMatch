@@ -1,3 +1,155 @@
+import numpy as np
+import os
+from tqdm import tqdm
+import pickle
+import pdb
+
+INPUT_DIR = "vgg16-features/features"
+OUT_DIR = "outputs"
+
+def pad_or_truncate(group, pad_size=8, feature_dim=4096):
+    
+    #group: NumPy 配列 (n, feature_dim)
+    #n が pad_size 未満なら 0 パディング、以上なら先頭 pad_size 件にトリミングして返す。
+    #また、元の n を返す。
+    
+    n = group.shape[0]
+    if n >= pad_size:
+        #print("item")
+        #pdb.set_trace()
+        return group[:pad_size], pad_size
+    else:
+        if feature_dim == 1:
+            return group, n
+        padded = np.zeros((pad_size, feature_dim), dtype=group.dtype)
+        padded[:n] = group
+        return padded, n
+
+
+def main(label_dir, n_comb=1, n_cands=8, pad_size=8, seed=0):
+    test_pkl = os.path.join(label_dir, "test2.pkl")
+    with open(test_pkl, "rb") as f:
+        test_data = pickle.load(f)
+        test_y = pickle.load(f)
+        test_z = pickle.load(f)
+        test_id = pickle.load(f)
+    #random seed
+    np.random.seed(seed)
+    
+    all_x = []       # 各候補グループ: (pad_size, 4096)
+    all_x_size = []  # 元のアイテム数（パディング前のサイズ）
+    all_y = []       # マッチングラベル
+    all_id = []      # アイテム画像のid
+
+    for i in range(len(test_data)):
+        data=[]
+        data_id=[]
+        data_labels=[]
+        query=[]
+        query_id=[]
+        answer=[]
+        answer_id=[]
+        answers=[]
+        answers_id=[]
+
+        lst = np.delete(np.arange(len(test_data)), i)
+        others = np.random.choice(lst, n_comb - 1, replace=False).tolist()
+        target = [i] + others
+
+        setX_images, setY_images = [], []
+        setX_ids, setY_ids = [], []
+        for j in target:
+            images = np.array(test_data[j])
+            ids = np.array(test_id[j])
+            y_size = len(images) // 2
+
+            xy_mask = [True] * (len(images) - y_size) + [False] * y_size
+            xy_mask = np.random.permutation(xy_mask)
+            setX_images.append(images[xy_mask])     #extendにするとリスト型になりpad_or_truncateでエラーがでる
+            setX_ids.append(ids[xy_mask])
+            setY_images.append(images[~xy_mask])
+            setY_ids.append(ids[~xy_mask])
+
+        query = np.concatenate(setX_images, axis=0)
+        query_id = np.concatenate(setX_ids, axis=0)
+        answer = np.concatenate(setY_images, axis=0)
+        answer_id = np.concatenate(setY_ids, axis=0)
+        answers.append(answer)
+        answers_id.append(answer_id)
+
+        for j in range(n_cands - 1):
+            lst = np.delete(np.arange(len(test_data)), target)
+            negatives = np.random.choice(lst, n_comb, replace=False).tolist()
+            assert len(set(target) & set(negatives)) == 0
+            target += negatives  # avoid double-selecting
+
+            setY_images = []
+            setY_ids = []
+            for k in negatives:
+                images = np.array(test_data[k])
+                ids = np.array(test_id[k])
+                perm_indices = np.random.permutation(images.shape[0])
+                # インデックスを使って画像とIDを同じ順序で並び替える
+                images = images[perm_indices]
+                ids = ids[perm_indices]
+                y_size = len(images) // 2
+                setY_images.append(images[:y_size])
+                setY_ids.append(ids[:y_size])
+
+            answer = np.concatenate(setY_images, axis=0)
+            answer_id = np.concatenate(setY_ids, axis=0)
+            answers.append(answer)
+            answers_id.append(answer_id)
+
+        #-------クエリとギャラリをまとめてラベルをつける-------
+        #クエリをラベル 1 とする
+        data.append(query)
+        data_id.append(query_id)
+        data_labels.append(1)
+        
+        # 正例は 1、負例は 2, 3, ... とする
+        label_counter = 1
+        for setY in answers:
+            data.append(setY)
+            data_labels.append(label_counter)
+            label_counter += 1
+        for setY_id in answers_id:
+            data_id.append(setY_id)
+
+        #-------各集合を (pad_size, 4096) に整形、元のsizeを記録-------
+        for group, label,group_ids in zip(data, data_labels, data_id):
+            #pdb.set_trace()
+            padded, orig_size = pad_or_truncate(group, pad_size=pad_size, feature_dim=4096)
+            padded_id, orig_size_id = pad_or_truncate(group_ids, pad_size=pad_size, feature_dim=1)
+            all_x.append(padded)
+            all_x_size.append(orig_size)
+            all_y.append(label)
+            all_id.append(padded_id)
+
+    #-------リストからNumPyに変換(パディングしていないidを除く)-------
+    final_x = np.stack(all_x, axis=0)         # shape: (total_samples, pad_size, 4096)
+    final_x_size = np.array(all_x_size)       # shape: (total_samples,)
+    final_y = np.array(all_y)                 # shape: (total_samples,)
+    final_id = all_id                         # shape: (total_samples, pad_size, 1)
+    
+    #-------pickleファイルで出力 ファイル名例：test_example_cand{n_cands}.pkl-------
+    output_path = os.path.join(label_dir, f"test3_example_cand{n_cands}.pkl")
+    with open(output_path, "wb") as f:
+        pickle.dump(final_x, f)
+        pickle.dump(final_x_size, f)
+        pickle.dump(final_y, f)
+        pickle.dump(final_id, f)
+    
+    print(f"Saved: {output_path}")
+
+
+        
+
+if __name__ == "__main__":
+    main("pickle_data", n_comb=1, n_cands=5, pad_size=8, seed=0)
+    #main("pickle_data", n_comb=1, n_cands=8,seed=0)
+
+"""
 import os
 import pickle
 import numpy as np
@@ -6,11 +158,11 @@ import pdb
 OUT_DIR = "pickle_data"
 
 def pad_or_truncate(group, pad_size=8, feature_dim=4096):
-    """
-    group: NumPy 配列 (n, feature_dim)
-    n が pad_size 未満なら 0 パディング、以上なら先頭 pad_size 件にトリミングして返す。
-    また、元の n を返す。
-    """
+    
+    #group: NumPy 配列 (n, feature_dim)
+    #n が pad_size 未満なら 0 パディング、以上なら先頭 pad_size 件にトリミングして返す。
+    #また、元の n を返す。
+    
     n = group.shape[0]
     if n >= pad_size:
         #print("item")
@@ -164,7 +316,7 @@ def main(label_dir, n_comb=1, n_cands=8, pad_size=8, seed=0):
 if __name__ == "__main__":
     # 例: label_dir に test.pkl があるディレクトリを指定、n_comb=1, n_cands=5 など
     main(label_dir="pickle_data", n_comb=1, n_cands=5, pad_size=8, seed=0)
-
+"""
 
 """
 import os
