@@ -405,7 +405,7 @@ class SMN(Model):
             x = tf.matmul(tf.transpose(phi1,[0,1,3,2]),phi2) #(nSet,nSet,nItemMax,D_1),(nSet,nSet,nItemMax,D_2) -> (nSet,nSet,D_1,D_2) 
             #x = tf.reshape(x,[x.shape[0],x.shape[1],1,x.shape[2]*x.shape[3]]) #(nSet,nSet,D_1,D_2) -> (nSet,nSet,1,D_1*D_2)
             #x = self.norm_2(x)
-            ""
+            """
             print("LNgamma:",self.norm_1.gamma.numpy())
             print("phi1 mean:", tf.reduce_mean(phi1).numpy())
             print("mlp24 std:", tf.math.reduce_std(phi1).numpy())
@@ -414,7 +414,7 @@ class SMN(Model):
             print("phi2 mean:", tf.reduce_mean(phi2).numpy())
             print("mlp24 std:", tf.math.reduce_std(phi2).numpy())
             print("mlp24 min/max:", tf.reduce_min(phi2).numpy(), tf.reduce_max(phi2).numpy())
-            ""
+            """
             #x = self.MLP_reshape(x) #(nSet,nSet,D_1,D_2) -> (nSet,nSet,D_1,1)
             x = tfa.activations.gelu(x)
             x = self.MLP_phi3_liner(x)
@@ -542,7 +542,7 @@ class SMN(Model):
             (grad, var)
             for (grad, var) in zip(gradients, trainable_vars)
             if grad is not None)
-        ""
+        """
 
         # 出力: 重みごとの勾配を表示
         for var, grad in zip(trainable_vars, gradients):
@@ -551,7 +551,7 @@ class SMN(Model):
                 print(f"Grad for {var.name}: {grad_mean}")
             else:
                 print(f"Grad for {var.name}: None")
-                ""
+                """
 
         # update metrics
         self.compiled_metrics.update_state(y_true, y_pred)
