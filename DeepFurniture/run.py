@@ -8,7 +8,7 @@ import pickle
 import sys
 import argparse
 import make_dataset as data
-import save_image as image
+#import save_image as image
 sys.path.insert(0, "../")
 #import models_point_nets as models
 
