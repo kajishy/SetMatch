@@ -32,7 +32,7 @@ def ensure_numeric(labels):
     return new_labels
 #-------------------------------
 class trainDataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, year=2017, split=0, batch_size=20, max_item_num=8, max_data=np.inf):
+    def __init__(self, batch_size=20, max_item_num=8, max_data=np.inf):
         data_path = f"pickle_data"
         self.max_item_num = max_item_num
         self.batch_size = batch_size
@@ -129,7 +129,7 @@ class trainDataGenerator(tf.keras.utils.Sequence):
 
 #-------------------------------
 class testDataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, year=2017, split=0, cand_num=4):
+    def __init__(self, cand_num=4):
         self.data_path = f"pickle_data"
         self.cand_num = cand_num
         # (number of groups in one batch) = (cand_num) + (one query)
@@ -140,133 +140,99 @@ class testDataGenerator(tf.keras.utils.Sequence):
             self.x = pickle.load(fp)
             self.x_size = pickle.load(fp)
             self.y = pickle.load(fp)
+            self.set_id = pickle.load(fp)
+            self.id = pickle.load(fp)
 
-"""
-#train_far.pickleなどを使用する場合のデータローダ
-import tensorflow as tf
-import pickle
-import numpy as np
-import pdb
-import os
-import sys
-from collections import Counter
-import random
 
-def interleave_arrays(A, B):
-    ""
-    #AとBを交互に結合する。
-    #A[0], B[0], A[1], B[1], ..., A[-1], B[-1]という順に並ぶようにする。
-    ""
-    interleaved = np.empty((A.shape[0] + B.shape[0], *A.shape[1:]), dtype=A.dtype)
-    interleaved[0::2] = A  # 偶数番目にAを配置
-    interleaved[1::2] = B  # 奇数番目にBを配置
-    return interleaved
+            
+#-------------------------------
+# gather and save pickle data
+def make_packed_pickle(files, save_path):
+    X = []
+    Y = []
+    for file in files:
+        with open(file, 'rb') as f:
+            try:
+                x = np.array(pickle.load(f))
+            except:
+                pass
+                #print(f"{os.path.basename(file)}: empty")
+            else:
+                #print(f"{os.path.basename(file)}: {x.shape}")
+                X.append(x)
+                Y.append(int(os.path.basename(file).split('.')[0]))
 
-class DataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, year=2017, split=0, batch_size=20, max_item_num=8, max_data=np.inf, mlp_flag=False, set_loss=False, whitening_path=None, seed_path=None):
-        data_path = "pickle_data"  # train, valid, test.pickle のあるフォルダパス
-        self.max_item_num = max_item_num    # ここでは例として8に設定（0パディング後の固定サイズ）
-        self.batch_size = batch_size
-        self.isMLP = mlp_flag
-        self.set_loss = set_loss
-        
-        # load train data
-        with open(f'{data_path}/train_fur.pkl', 'rb') as fp:
-            self.query_tr, self.positive_tr, self.y_tr, self.y_catQ_tr, self.y_catP_tr, self.x_size_tr, self.y_size_tr = pickle.load(fp)
-        self.x_train = interleave_arrays(self.query_tr, self.positive_tr)
-        self.y_train = np.repeat(self.y_tr, 2)
-        self.x_size_train = interleave_arrays(self.x_size_tr, self.y_size_tr)
-        # self.x_size_tr, self.y_size_tr は各サンプルの元々の要素数（例：8未満や8以上の値）を保持している
-        
-        self.train_num = len(self.x_train)
-        # feature vector dimension
-        self.dim = len(self.query_tr[0][0])
-        
-        # limit data if needed
-        if self.train_num > max_data:
-            self.train_num = max_data
-        
-        # load validation data
-        with open(f'{data_path}/validation_fur.pkl', 'rb') as fp:
-            self.query_val, self.positive_val, self.y_val, self.y_catQ_val, self.y_catP_val, self.x_size_val, self.y_size_val = pickle.load(fp)
-        self.x_valid = interleave_arrays(self.query_val, self.positive_val)
-        self.y_valid = np.repeat(self.y_val, 2)
-        self.x_size_valid = interleave_arrays(self.x_size_val, self.y_size_val)
-        
-        # load test data
-        with open(f'{data_path}/test_fur.pkl', 'rb') as fp:
-            self.query_test, self.positive_test, self.y_test, self.y_catQ_test, self.y_catP_test, self.x_size_test, self.y_size_test, self.x_id_test, self.y_id_test, self.scene_id_dict = pickle.load(fp) 
-        self.x_test = interleave_arrays(self.query_test, self.positive_test)
-        self.xy_size_test = interleave_arrays(self.x_size_test, self.y_size_test)
-        self.y_test = np.repeat(self.y_test, 2)
-        #pdb.set_trace()
+    print(f"save to {save_path}")
+    with open(save_path,'wb') as f:
+        pickle.dump(X,f)
+        pickle.dump(Y,f)
+#-------------------------------
 
-        # 初期のインデックスは順番そのまま（並び順は固定）  
-        self.inds = np.arange(len(self.x_train))
-        # 初期状態ではシフトなし（つまり元の順序）を使う
-        self.inds_shifted = self.inds.copy()
-    
-    def __len__(self):
-        # バッチ数
-        return self.train_num // self.batch_size
-    
-    def __getitem__(self, index):
-        # self.inds_shuffle からバッチ用のインデックスを抽出してデータ生成
-        x, x_size, y, b_size = self.data_generation(self.x_train, self.y_train, self.x_size_train, self.inds_shifted, self.batch_size, index)
-        return (x, x_size), y
-    
-    def validation_generator(self):
-        # validation はシャッフルせずに全件（またはバッチごと）返す
-        #pdb.set_trace()
-        x, x_size, y, b_size = self.data_generation(self.x_valid, self.y_valid, self.x_size_valid, np.arange(len(self.x_valid)), self.batch_size, -1)
-        return (x, x_size), y
-    
-    def on_epoch_end(self):
-        # エポック終了時にランダムな開始位置だけを変更して、並び順は固定のままにする
-        shift = np.random.randint(0, len(self.inds))
-        self.inds_shifted = np.roll(self.inds, shift)
-    
-    def data_generation(self, x, y, sizes, inds, b_size, index):
-        ""
-        #x: すでに集合として与えられたデータの全体 (リストまたは配列)
-        #y: それに対応するラベルの全体 (リストまたは配列)
-        #sizes: 各サンプルの元の要素数を保持した配列（例: self.x_size_tr）
-        #inds: シャッフル済みのインデックス配列
-        #b_size: バッチサイズ
-        #index: バッチの開始インデックス（-1なら全データを返す）
-        ""
-        if index >= 0:
-            start_ind = index * b_size
-            end_ind = start_ind + b_size
-            batch_inds = inds[start_ind:end_ind]
-            x_batch = [x[i] for i in batch_inds]
-            y_batch = [y[i] for i in batch_inds]
-            size_batch = [sizes[i] for i in batch_inds]
-        else:
-            # index == -1 の場合、inds の順に全データを返す
-            x_batch = [x[i] for i in inds]
-            y_batch = [y[i] for i in inds]
-            size_batch = [sizes[i] for i in inds]
-            b_size = len(x_batch)
-        
-        b_size = len(x_batch)
-        # 各 x を max_item_num に合わせて zero padding（各 x は集合なのでそのまま扱う） 
-        x_batch_pad = [
-            np.vstack([xi, np.zeros([max(0, self.max_item_num - len(xi)), self.dim])])[:self.max_item_num]
-            for xi in x_batch
-        ]
-        # x_size_batch は、元の要素数から、実際にネットワークに入力される数（最大値は max_item_num）を返す
-        x_size_batch = np.array([min(s, self.max_item_num) for s in size_batch], dtype=np.float32)
-        
-        # numpy 配列に変換
-        x_batch_pad = np.array(x_batch_pad)
-        y_batch = np.array(y_batch)
-        
-        return x_batch_pad, x_size_batch, y_batch, b_size
-    
-    def test_generator(self, b_size):
-        # テストデータを、シャッフルせずインデックス順にバッチサイズ分切り出して返す
-        x, x_size, y, size = self.data_generation(self.x_test, self.y_test, self.xy_size_test, np.arange(len(self.x_test)), b_size, -1)
-        return x, x_size, y, b_size+1
 
-"""
+
+#-------------------------------
+def make_packed_example_test_pickle(files, save_path, max_item_num):
+    X = []
+    X_size = []
+    Y = []
+    set_ids = []
+    image_ids = [] 
+    for file in files:
+        with open(file, 'rb') as f:
+            try:
+                x = pickle.load(f)
+                ids = pickle.load(f)
+            except:
+                pass
+            else:
+                dim = len(x[0][0])
+                stack = lambda z: np.vstack([np.vstack(z),np.zeros([np.max([0,max_item_num - len(z)]),dim])])[:max_item_num]
+                X.append(stack(x[0]))
+                X_size.append(np.float(len(x[0])))
+                [X.append(stack(x[1][i])) for i in range(len(x[1]))]
+                [X_size.append(np.float(len(x[1][i]))) for i in range(len(x[1]))]
+                Y.append(np.hstack([0,np.arange(len(x[1]))]))
+                set_ids.append(str(os.path.basename(file).split('.')[0]))
+                image_ids.append(ids[0])
+                image_ids.extend([i if isinstance(i[0], int) else i[0] for i in ids[1]])
+        
+    X = np.array(X)
+    X_size = np.array(X_size)
+    Y = np.hstack(Y)
+
+    with open(save_path,'wb') as f:
+        pickle.dump(X,f)
+        pickle.dump(X_size,f)
+        pickle.dump(Y,f)      
+        pickle.dump(set_ids,f)  
+        pickle.dump(image_ids,f) 
+    print("saving pickle files to " + str(save_path))
+#-------------------------------
+
+#-------------------------------        
+if __name__ == '__main__':   
+    # parameters
+    split = 0
+    max_item_num = 8
+    n_cands=5
+
+    # gen = testDataGenerator()
+
+    # path
+    data_path = f"pickle_data"
+    train_path = f"{data_path}/train"
+    test_path = f"{data_path}/test"
+    valid_path = f"{data_path}/valid"
+    test_example_path = f"json_data/pickles/test_examples_ncomb_1_ncands_{n_cands}"
+
+    # file list
+    #train_files = glob.glob(f"{train_path}/*.pkl")
+    #test_files = glob.glob(f"{test_path}/*.pkl")
+    #valid_files = glob.glob(f"{valid_path}/*.pkl")
+    test_example_files = glob.glob(f"{test_example_path}/*.pkl")        
+    
+    # save packed pickle
+    #make_packed_pickle(train_files, f"{data_path}/train.pkl")
+    #make_packed_pickle(test_files, f"{data_path}/test.pkl")
+    #make_packed_pickle(valid_files, f"{data_path}/valid.pkl")
+    make_packed_example_test_pickle(test_example_files, f"{data_path}/test_example_cand{n_cands}.pkl", max_item_num=max_item_num)

@@ -8,7 +8,7 @@ import pickle
 import sys
 import argparse
 import make_dataset as data
-import save_image2 as image
+import save_image as image
 sys.path.insert(0, "../")
 #import models_point_nets as models
 
@@ -39,8 +39,7 @@ print(f"Loaded module: {models.__name__}")
 # mode name
 mode = util.mode_name(args.mode)
 model_name = util.model_name(args.model)
-# year of data and max number of items
-year = 2017
+#max number of items
 max_item_num = 8
 test_cand_num = 5
 #max_data_num = 10000
@@ -117,7 +116,6 @@ else:
         modelPath+=f'_crossnorm'
         modelPath+=f'_models_{model_name}'
 
-#modelPath = os.path.join(modelPath,f"year{year}")
 modelPath = os.path.join(modelPath,f"max_item_num{max_item_num}")
 modelPath = os.path.join(modelPath,f"layer{args.num_layers}")
 modelPath = os.path.join(modelPath,f"num_head{args.num_heads}")
@@ -133,11 +131,11 @@ if not os.path.exists(modelPath):
 #----------------------------
 # make data
 #pdb.set_trace()
-train_generator = data.trainDataGenerator(year=year, batch_size=batch_size, max_item_num=max_item_num)
+train_generator = data.trainDataGenerator(batch_size=batch_size, max_item_num=max_item_num)
 x_valid, x_size_valid, y_valid = train_generator.data_generation_val()
 
 # set data generator for test
-test_generator = data.testDataGenerator(year=year, cand_num=test_cand_num)
+test_generator = data.testDataGenerator(cand_num=test_cand_num)
 x_test = test_generator.x
 x_size_test = test_generator.x_size
 y_test = test_generator.y
@@ -146,16 +144,6 @@ test_batch_size = test_generator.batch_grp_num
 
 # load init seed vectors
 #pdb.set_trace()
-"""
-init_seed_pickle_path = "pickle_data/furniture_seed.pkl"
-whitening_path = "pickle_data/furniture_gausenoise.pkl"
-train_generator = data.DataGenerator(year=year, batch_size=batch_size, max_item_num=max_item_num,set_loss=False, whitening_path=not os.path.exists(whitening_path), seed_path=not os.path.exists(init_seed_pickle_path))
-#train_data_set = train_generator.get_train_dataset()
-valid_data_set = train_generator.validation_generator()
-x_test,x_size_test,y_test,test_batch_size = train_generator.test_generator(test_cand_num)
-pdb.set_trace()
-#process_and_save_images(x_test, y_test, x_id_test, y_id_test, "~yamazono/yoshida/DeepFurniture/uncompressed_data/furnitures/", "output_images/")
-"""
 #----------------------------
 #-----------------------------------------------------------------------
 
@@ -166,7 +154,8 @@ if args.model == 6:
     model = models.SMN(isCNN=False, is_final_linear=True, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
 elif args.model == 5:
     print("DuMLP")
-    model = models.SMN(isSoftMax=0, max_item_num=max_item_num, hidden_dim=args.item_perm_order, isCNN=False, is_final_linear=True, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, is_neg_down_sample=is_neg_down_sample)
+    print("item_perm_order(isSoftmax):",args.item_perm_order)
+    model = models.SMN(isSoftMax=args.item_perm_order, max_item_num=max_item_num, hidden_dim=args.hidden_dim, isCNN=False, is_final_linear=True, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, is_neg_down_sample=is_neg_down_sample)
 else :#is_final_linear=false
     model = models.SMN(is_mixer=args.is_mixer, max_item_num=max_item_num, item_perm_order=args.item_perm_order, is_set_perm=args.is_set_perm, isCNN=False, is_final_linear=True, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
 

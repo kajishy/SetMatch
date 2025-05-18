@@ -5,6 +5,18 @@ import argparse
 from collections import Counter
 import pdb
 
+def get_arguments():
+    parser = argparse.ArgumentParser(
+        description="Split collections in data.pkl into train/valid/test sets (by collection) with x: features, y: set_name, z: category_ids"
+    )
+    parser.add_argument("--input", type=str, default="pickle_data/deep_furniture4096.pkl", help="Path to input data.pkl file")
+    parser.add_argument("--output_dir", type=str, default="pickle_data", help="Directory to save train.pkl, valid.pkl, test.pkl")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed for reproducibility")
+    parser.add_argument("--min_num", type=int, default=4, help="Minimum number of items in the set")
+    parser.add_argument("--max_num", type=int, default=16, help="Maximum number of items in the set")
+    
+    return parser.parse_args()
+
 def load_data(path):
     path = os.path.expanduser(path)
     with open(path, 'rb') as f:
@@ -97,7 +109,9 @@ def save_pickle_split(data_tuple, save_path):
         pickle.dump(data_tuple[3], f)
     print(f"Saved {save_path}")
 
-def main(args):
+def main():
+    args = get_arguments()
+    print(args.input)
     # data.pkl を読み込む
     data = load_data(args.input)
     
@@ -109,10 +123,13 @@ def main(args):
     
     # 分割データの保存（個別に3回 dump しているので、読み出し時は
     # with open(..., 'rb') as fp: x = pickle.load(fp); y = pickle.load(fp); z = pickle.load(fp) となる）
-    save_pickle_split(train, os.path.join(args.output_dir, 'train2.pkl'))
-    save_pickle_split(valid, os.path.join(args.output_dir, 'valid2.pkl'))
-    save_pickle_split(test,  os.path.join(args.output_dir, 'test2.pkl'))
+    save_pickle_split(train, os.path.join(args.output_dir, 'train.pkl'))
+    save_pickle_split(valid, os.path.join(args.output_dir, 'valid.pkl'))
+    save_pickle_split(test,  os.path.join(args.output_dir, 'test.pkl'))
 
+if __name__ == "__main__":
+    main()
+"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Split collections in data.pkl into train/valid/test sets (by collection) with x: features, y: set_name, z: category_ids"
@@ -124,3 +141,4 @@ if __name__ == "__main__":
     parser.add_argument("--max_num", type=int, default=16, help="Maximum number of items in the set")
     args = parser.parse_args()
     main(args)
+"""
