@@ -504,7 +504,7 @@ class CNN(Model):
 #----------------------------
 # set matching network
 class SMN(Model):
-    def __init__(self, isCNN=True, max_item_num=5, item_perm_order=0, is_set_perm=1, is_set_norm=False, is_cross_norm=True, is_final_linear=True, num_layers=1, num_heads=2, mode='setRepVec_pivot', is_mixer=1, baseChn=32, rep_vec_num=1, max_channel_ratio=2, is_neg_down_sample=False):
+    def __init__(self,isSoftMax=0 , isCNN=True, max_item_num=5, item_perm_order=0, is_set_perm=1, is_set_norm=False, is_cross_norm=True, is_final_linear=True, num_layers=1, num_heads=2, mode='setRepVec_pivot', is_mixer=1, baseChn=32, rep_vec_num=1, max_channel_ratio=2, is_neg_down_sample=False):
         super(SMN, self).__init__()
         self.isCNN = isCNN
         self.num_layers = num_layers
@@ -691,6 +691,13 @@ class SMN(Model):
         # calculation of score
         if self.mode=='CSS':
             score = self.cross_set_score(x,x_size)   #(nSet,nSet,1)
+
+        elif self.mode.find('setRepVec') > -1:    # representative vec
+            x_rep = x[:,:,:self.rep_vec_num,:] #(nSet,nSet,nItemMax+1,D) -> (nSet,nSet,D)
+            shape = x_rep.shape
+            x_rep = tf.reshape(x_rep,[shape[0],shape[1],-1])
+
+            score = self.dot_set_score(x_rep) #(nSet,nSet,D) -> (nSet, nSet)
         
         elif self.mode=='sumPooling':
             # zero-padding mask
@@ -740,12 +747,6 @@ class SMN(Model):
 
             score = self.dot_set_score(x_rep)
 
-        elif self.mode.find('setRepVec') > -1:    # representative vec
-            x_rep = x[:,:,:self.rep_vec_num,:] #(nSet,nSet,nItemMax+1,D) -> (nSet,nSet,D)
-            shape = x_rep.shape
-            x_rep = tf.reshape(x_rep,[shape[0],shape[1],-1])
-
-            score = self.dot_set_score(x_rep) #(nSet,nSet,D) -> (nSet, nSet)
    
         elif self.mode=='poolingMA':  # pooling by multihead attention            
             # create Seed Vector

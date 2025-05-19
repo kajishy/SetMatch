@@ -161,7 +161,7 @@ elif args.model == 5:
 else :#is_final_linear=false
     model = models.SMN(is_mixer=args.is_mixer, max_item_num=max_item_num, item_perm_order=args.item_perm_order, is_set_perm=args.is_set_perm, isCNN=False, is_final_linear=True, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
 """
-model = models.SMN(is_mixer=args.is_mixer, max_item_num=max_item_num, item_perm_order=args.item_perm_order, is_set_perm=args.is_set_perm, isCNN=False, is_final_linear=False, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
+model = models.SMN(isSoftMax=args.isSoftMax, is_mixer=args.is_mixer, max_item_num=max_item_num, item_perm_order=args.item_perm_order, is_set_perm=args.is_set_perm, isCNN=False, is_final_linear=False, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
 
 checkpoint_path = os.path.join(modelPath,"model/cp.ckpt")
 checkpoint_dir = os.path.dirname(checkpoint_path)
