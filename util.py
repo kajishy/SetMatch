@@ -6,7 +6,7 @@ import os
 #----------------------------
 # model names
 def mode_name(mode):
-    mode_name = ['MLP','linearProj','maxPooling','poolingMA','CSS','setRepVec_biPMA','setRepVec_pivot']
+    mode_name = ['MLP','linearProj','maxPooling','poolingMA','CSS','setRepVec_biPMA','setRepVec_pivot','sumPooling','dumlp']
 
     return mode_name[mode]
 #----------------------------
