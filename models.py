@@ -10,11 +10,11 @@ import time
 #----------------------------
 # MLP  
 class MLP(Layer):
-    def __init__(self, hidden_dim=128, out_dim=64, isSoftMax=0):
+    def __init__(self, hidden_dim=128, out_dim=64, is_SoftMax=0):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.out_dim = out_dim
-        self.isSoftMax = isSoftMax
+        self.is_SoftMax = is_SoftMax
         self.smallV = 1e-8
 
         self.linear = Dense(self.hidden_dim, activation="linear")
@@ -39,7 +39,7 @@ class MLP(Layer):
         if tf.rank(x) == 4:
             x = x*mask
 
-        if self.isSoftMax==1:
+        if self.is_SoftMax==1:
             x = self.masked_softmax(x)
 
         #x = tf.nn.gelu(x)
@@ -48,14 +48,14 @@ class MLP(Layer):
 #----------------------------
 
 #----------------------------
-class dumlpLayer(Layer):
-    def __init__(self, item_num=5, item_dim=64, hidden_dim=128, isSoftMax=0, is_set_perm=False):
+class mixerLayer(Layer):
+    def __init__(self, item_num=5, item_dim=64, hidden_dim=128, is_SoftMax=0, is_set_perm=False):
         super().__init__()
         self.item_num = item_num
-        self.isSoftMax = isSoftMax
+        self.is_SoftMax = is_SoftMax
         self.MLP_channel = MLP(item_dim*2, out_dim=item_dim)
         self.MLP1 = MLP(item_dim*2, out_dim=item_dim)
-        self.MLP2 = MLP(item_dim*2, out_dim=hidden_dim, isSoftMax=isSoftMax)
+        self.MLP2 = MLP(item_dim*2, out_dim=hidden_dim, is_SoftMax=is_SoftMax)
         self.MLP3 = MLP(item_dim/2, out_dim=1)
         self.MLP3_linear = Dense(1, activation="linear")
         if is_set_perm:
@@ -86,133 +86,6 @@ class dumlpLayer(Layer):
         return x
 #----------------------------
 
-#----------------------------
-# MLP janossy
-class MLPJanossy(Layer):
-    def __init__(self, hidden_dim=128, out_dim=64, item_num=5, item_perm_order=0, is_set_perm=False):
-        super().__init__()
-        self.hidden_dim = hidden_dim
-        self.out_dim = out_dim
-        self.item_perm_order = item_perm_order
-        self.is_set_perm = is_set_perm
-        self.smallV = 1e-8
-
-        # possible permutation
-        self.item_combs = [i for i in itertools.permutations(range(item_num), item_perm_order)]
-        self.set_combs = [i for i in itertools.permutations(range(int(item_num/2)), item_perm_order)]
-
-        if item_perm_order > 0:
-            self.linear = Dense(self.hidden_dim, activation="linear", use_bias=False)
-            self.bias = self.add_weight(name='bias',shape=(self.hidden_dim),initializer='zeros',trainable=True)
-            self.linear2 = Dense(1, activation="linear")
-        else:
-            self.linear = Dense(self.hidden_dim, activation="linear")
-            self.linear2 = Dense(out_dim, activation="linear")
-        
-
-    def call(self, x):
-        #pdb.set_trace()
-        if self.item_perm_order > 0:
-            
-            if self.is_set_perm:
-                ""
-                shape = tf.shape(x)
-                """
-                mask = tf.cast(tf.reduce_sum(tf.cast(x!=0,float),axis=-2,keepdims=1)!=0,float)
-                mask = tf.reshape(mask,[shape[0],shape[1],1,2,int(shape[3]/2)])
-                mask = tf.stack([tf.gather(mask,c,axis=-1) for c in self.set_combs])
-                mask = tf.reshape(mask,[len(self.set_combs),shape[0],shape[1],1,self.item_perm_order*2])
-                mask = tf.reduce_sum(tf.reduce_sum(mask,axis=-1,keepdims=1),axis=0)
-                """
-
-                z = tf.reshape(x,[shape[0],shape[1],shape[2],2,int(shape[3]/2)])
-                z = tf.stack([tf.gather(z,c,axis=-1) for c in self.set_combs])
-                z = tf.reshape(z,[len(self.set_combs),shape[0],shape[1],shape[2],self.item_perm_order*2])
-                z = self.linear(z)
-                z = tfa.activations.gelu(z)
-                """
-                z = self.linear2(z)
-                z = tf.reduce_sum(z,axis=0)
-                x = tf.tile(z, [1, 1, 1, self.out_dim])
-                """
-                z = tf.reduce_sum(z,axis=0)
-                z = self.linear2(z)
-                x = tf.tile(z, [1, 1, 1, self.out_dim])
-
-            else:
-                """                           
-                mask = tf.cast(tf.reduce_sum(tf.cast(x!=0,float),axis=-2,keepdims=1)!=0,float)
-                mask = tf.stack([tf.gather(mask,c,axis=-1) for c in self.item_combs])
-                mask = tf.reduce_sum(tf.reduce_sum(mask,axis=-1,keepdims=1),axis=0)
-                """
-                
-                z = tf.stack([tf.gather(x,c,axis=-1) for c in self.item_combs])             
-                z = self.linear(z)
-                z = tfa.activations.gelu(z)
-                """
-                z = self.linear2(z)
-                z = tf.reduce_sum(z,axis=0)
-                x = tf.tile(z, [1, 1, 1, self.out_dim])
-                """
-                z = tf.reduce_sum(z,axis=0)
-                z = self.linear2(z)
-                x = tf.tile(z, [1, 1, 1, self.out_dim])
-
-        else:
-            x = self.linear(x)
-            x = tfa.activations.gelu(x)
-            x = self.linear2(x)
-
-        #x = tf.nn.gelu(x)
-        
-        return x
-#----------------------------
-
-#----------------------------
-class janossymixerLayer(Layer):
-    def __init__(self, item_num=5, item_dim=64, hidden_dim=128, item_perm_order=0, is_set_perm=False):
-        super().__init__()
-        self.is_setperm = is_set_perm
-
-        self.MLP_item = MLPJanossy(item_num, out_dim=item_num, item_num=item_num, item_perm_order=item_perm_order, is_set_perm=is_set_perm)
-        self.MLP_channel = MLPJanossy(hidden_dim, out_dim=item_dim)
-        ""
-        if is_set_perm:
-            self.norm_item = layer_normalization(is_set_norm=True, is_cross_norm=True)
-            #self.norm_channel = layer_normalization(is_set_norm=True, is_cross_norm=True)
-        else:
-            self.norm_item = layer_normalization(is_set_norm=True)
-            #self.norm_channel = layer_normalization(is_set_norm=True)
-            ""
-        #self.norm_item = LayerNormalization()
-        self.norm_channel = LayerNormalization()
-
-    def call(self, x, x_size):
-        #pdb.set_trace()
-
-        # mask
-        shape = tf.shape(x)
-        mask = tf.tile(tf.cast(tf.reduce_sum(tf.cast(x!=0,float),axis=-1,keepdims=1)!=0,float),[1,1,1,shape[-1]])
-
-        # channel mixer
-        x_orig = x
-        x = self.norm_channel(x)
-        x = self.MLP_channel(x)
-        x = x*mask
-
-        x += x_orig
-
-        # item mixer
-        x_orig = x
-        x = self.norm_item(x,x_size)
-        x = tf.transpose(x, [0, 1, 3, 2])
-        x = tf.transpose(self.MLP_item(x), [0, 1, 3, 2])
-        x = x*mask
-
-        x += x_orig
-
-
-        return x
 #----------------------------
 # normalization
 class layer_normalization(Layer):
@@ -504,19 +377,18 @@ class CNN(Model):
 #----------------------------
 # set matching network
 class SMN(Model):
-    def __init__(self,isSoftMax=0 , isCNN=True, max_item_num=5, item_perm_order=0, is_set_perm=1, is_set_norm=False, is_cross_norm=True, is_final_linear=True, num_layers=1, num_heads=2, mode='setRepVec_pivot', is_mixer=1, baseChn=32, rep_vec_num=1, max_channel_ratio=2, is_neg_down_sample=False):
+    def __init__(self, is_SoftMax=0 , isCNN=True, max_item_num=5, item_perm_order=0, is_set_perm=1, is_set_norm=False, is_cross_norm=True, is_final_linear=True, num_layers=1, num_heads=2, head_mode='setRepVec_pivot', backbone_mode=1, baseChn=32, rep_vec_num=1, max_channel_ratio=2, is_neg_down_sample=False):
         super(SMN, self).__init__()
         self.isCNN = isCNN
         self.num_layers = num_layers
-        self.mode = mode
+        self.backbone_mode = backbone_mode #0:Attention,1:Mixer
+        self.head_mode = head_mode
         self.rep_vec_num = rep_vec_num
         self.baseChn = baseChn
         self.is_final_linear = is_final_linear
         self.is_neg_down_sample = is_neg_down_sample
-        self.is_mixer = is_mixer #0:Attention,1:MLP-janossy,3:DuMLP
-        self.item_perm_order = item_perm_order
 
-        if self.mode.find('setRepVec') > -1:
+        if self.head_mode.find('setRepVec') > -1:
             max_item_num += 1
 
         #---------------------
@@ -528,8 +400,7 @@ class SMN(Model):
         #---------------------
         # encoder
         self.set_emb = self.add_weight(name='set_emb',shape=(1,1,self.rep_vec_num,baseChn*max_channel_ratio),trainable=True)
-        self.self_mixer_janossy = [janossymixerLayer(item_num=max_item_num, item_dim=baseChn*max_channel_ratio, hidden_dim=num_heads, item_perm_order=item_perm_order) for i in range(num_layers)]
-        self.self_mixer_dumlp = [dumlpLayer(item_num=max_item_num, item_dim=baseChn*max_channel_ratio, hidden_dim=num_heads, isSoftMax=item_perm_order) for i in range(num_layers)]
+        self.self_mixer = [mixerLayer(item_num=max_item_num, item_dim=baseChn*max_channel_ratio, hidden_dim=num_heads, is_SoftMax=is_SoftMax) for i in range(num_layers)]
         self.self_attentions = [set_attention(head_size=baseChn*max_channel_ratio, num_heads=num_heads, self_attention=True) for i in range(num_layers)]
         self.layer_norms_enc1 = [layer_normalization(is_set_norm=is_set_norm) for i in range(num_layers)]
         self.layer_norms_enc2 = [layer_normalization(is_set_norm=is_set_norm) for i in range(num_layers)]
@@ -538,8 +409,7 @@ class SMN(Model):
 
         #---------------------
         # decoder
-        self.cross_mixer_janossy = [janossymixerLayer(item_num=max_item_num*2, item_dim=baseChn*max_channel_ratio, hidden_dim=num_heads, item_perm_order=item_perm_order, is_set_perm=is_set_perm) for i in range(num_layers)]
-        self.cross_mixer_dumlp = [dumlpLayer(item_num=max_item_num*2, item_dim=baseChn*max_channel_ratio, hidden_dim=num_heads, isSoftMax=item_perm_order, is_set_perm=is_set_perm) for i in range(num_layers)]
+        self.cross_mixer = [mixerLayer(item_num=max_item_num*2, item_dim=baseChn*max_channel_ratio, hidden_dim=num_heads, is_SoftMax=is_SoftMax, is_set_perm=is_set_perm) for i in range(num_layers)]
         self.cross_attentions = [set_attention(head_size=baseChn*max_channel_ratio, num_heads=num_heads) for i in range(num_layers)]
         self.layer_norms_dec1 = [layer_normalization(is_set_norm=is_set_norm, is_cross_norm=is_cross_norm) for i in range(num_layers)]
         self.layer_norms_dec2 = [layer_normalization(is_set_norm=is_set_norm, is_cross_norm=is_cross_norm) for i in range(num_layers)]
@@ -554,10 +424,9 @@ class SMN(Model):
         self.fc_final1 = Dense(baseChn, name='setmatching_fc1')
         self.fc_final2 = Dense(1, activation='sigmoid', name='setmatching_fc2')
         self.fc_proj = Dense(1, use_bias=False, name='projection')  # linear projection
-        self.MLP = MLPJanossy(hidden_dim=num_heads, out_dim=1, item_num=max_item_num, item_perm_order=item_perm_order)  # MLP
         #self.MLP = MLP(hidden_dim=num_heads, out_dim=1, item_num=max_item_num)  # MLP
         self.MLP_phi1 = MLP(hidden_dim=baseChn*max_channel_ratio*2, out_dim=self.baseChn*max_channel_ratio)  # phi1
-        self.MLP_phi2 = MLP(hidden_dim=baseChn*max_channel_ratio*2, out_dim=num_heads, isSoftMax=item_perm_order)  # phi2
+        self.MLP_phi2 = MLP(hidden_dim=baseChn*max_channel_ratio*2, out_dim=num_heads, is_SoftMax=item_perm_order)  # phi2
         #self.MLP_phi2 = MLP(hidden_dim=self.hidden_dim, out_dim=1, item_perm_order=self.item_perm_order)  # phi2
         self.MLP_3 = MLP(hidden_dim=baseChn*max_channel_ratio/2, out_dim=1)  # MLP
         self.MLP_phi3_liner = Dense(1, activation="linear",name='phi3')
@@ -602,7 +471,7 @@ class SMN(Model):
 
         # add_embedding
         x_orig = x
-        if self.mode.find('setRepVec') > -1:
+        if self.head_mode.find('setRepVec') > -1:
             set_emb_tile = tf.tile(self.set_emb, [nSet,nSet,1,1])
             x = tf.concat([set_emb_tile,x], axis=2)
             x_size += 1
@@ -616,18 +485,14 @@ class SMN(Model):
         #---------------------
         #pdb.set_trace()
         # encoder
-        if self.is_mixer==1:   # Janossy            
+        if self.backbone_mode==1:   # self-mixer           
             for i in range(self.num_layers):
-                x = self.self_mixer_janossy[i](x, x_size=x_size)
-                debug[f'x_encoder_layer_{i+1}'] = x
-        elif self.is_mixer==2:   # DuMLP           
-            for i in range(self.num_layers):
-                x = self.self_mixer_dumlp[i](x,x_size)
+                x = self.self_mixer[i](x, x_size=x_size)
                 debug[f'x_encoder_layer_{i+1}'] = x
         else:               # self-attention
             for i in range(self.num_layers):
 
-                if self.mode.find('setRepVec') > -1:
+                if self.head_mode.find('setRepVec') > -1:
                     self.self_attentions[i].rep_vec_num = self.rep_vec_num
 
                 z = self.layer_norms_enc1[i](x,x_size)
@@ -647,29 +512,21 @@ class SMN(Model):
         #---------------------
         # decoder
         debug[f'x_decoder_layer_0'] = x
-        if self.is_mixer==1:   # Janossy
+        if self.backbone_mode==1:   # cross-mixer
             x = tf.concat([x,tf.transpose(x,[1,0,2,3])],axis=2)
 
             for i in range(self.num_layers):
-                x = self.cross_mixer_janossy[i](x, x_size=x_size)
-                debug[f'x_decoder_layer_{i+1}'] = x[:,:,:nItemMax]
-
-            x = x[:,:,:nItemMax]
-        elif self.is_mixer==2:   # DuMLP
-            x = tf.concat([x,tf.transpose(x,[1,0,2,3])],axis=2)
-
-            for i in range(self.num_layers):
-                x = self.cross_mixer_dumlp[i](x,x_size)
+                x = self.cross_mixer[i](x, x_size=x_size)
                 debug[f'x_decoder_layer_{i+1}'] = x[:,:,:nItemMax]
 
             x = x[:,:,:nItemMax]
         else:               # cross-attention
             for i in range(self.num_layers):
 
-                if self.mode.find('setRepVec') > -1:
+                if self.head_mode.find('setRepVec') > -1:
                     self.cross_attentions[i].rep_vec_num = self.rep_vec_num            
 
-                if self.mode == 'setRepVec_pivot': # Bi-PMA + pivot-cross
+                if self.head_mode == 'setRepVec_pivot': # Bi-PMA + pivot-cross
                     self.cross_attentions[i].pivot_cross = True
 
                 z = self.layer_norms_dec1[i](x,x_size)
@@ -689,17 +546,17 @@ class SMN(Model):
         #---------------------
         #pdb.set_trace()
         # calculation of score
-        if self.mode=='CSS':
+        if self.head_mode=='CSS':
             score = self.cross_set_score(x,x_size)   #(nSet,nSet,1)
 
-        elif self.mode.find('setRepVec') > -1:    # representative vec
+        elif self.head_mode.find('setRepVec') > -1:    # representative vec
             x_rep = x[:,:,:self.rep_vec_num,:] #(nSet,nSet,nItemMax+1,D) -> (nSet,nSet,D)
             shape = x_rep.shape
             x_rep = tf.reshape(x_rep,[shape[0],shape[1],-1])
 
             score = self.dot_set_score(x_rep) #(nSet,nSet,D) -> (nSet, nSet)
         
-        elif self.mode=='sumPooling':
+        elif self.head_mode=='sumPooling':
             # zero-padding mask
             mask = tf.tile(tf.cast(tf.reduce_sum(tf.cast(x!=0,float),axis=-1,keepdims=1)!=0,float),[1,1,1,x.shape[-1]])
             x = self.norm(x)
@@ -708,12 +565,12 @@ class SMN(Model):
 
             score = self.dot_set_score(x_rep)
 
-        elif self.mode=='MLP':
+        elif self.head_mode=='MLP':
             x_proj = self.MLP(tf.transpose(x,[0,1,3,2])) #(nSet,nSet,nItemMax,D) -> (nSet,nSet,D,nItemMax) -> FC -> (nSet,nSet,D,1)
             x_rep = x_proj[:,:,:,0] #(nSet,nSet,D,1) -> (nSet,nSet,D)
             score = self.dot_set_score(x_rep)
 
-        elif self.mode=='dumlp':
+        elif self.head_mode=='dumlp':
             #pdb.set_trace()
             mask = tf.tile(tf.cast(tf.reduce_sum(tf.cast(x!=0,float),axis=-1,keepdims=1)!=0,float),[1,1,1,x.shape[-1]])
             x = self.norm(x)
@@ -732,12 +589,12 @@ class SMN(Model):
             x_rep = x_proj[:,:,0,:] #(nSet,nSet,1,D) -> (nSet,nSet,D)
             score = self.dot_set_score(x_rep)         
 
-        elif self.mode=='linearProj':
+        elif self.head_mode=='linearProj':
             x_proj = self.fc_proj(tf.transpose(x,[0,1,3,2])) #(nSet,nSet,nItemMax,D) -> (nSet,nSet,D,nItemMax) -> FC -> (nSet,nSet,D,1)
             x_rep = x_proj[:,:,:,0] #(nSet,nSet,D,1) -> (nSet,nSet,D)
             score = self.dot_set_score(x_rep)
 
-        elif self.mode=='maxPooling':
+        elif self.head_mode=='maxPooling':
             # zero-padding mask
             shape = tf.shape(x)
             mask = tf.tile(tf.reduce_sum(x,axis=-1,keepdims=1)!=0,[1,1,1,shape[-1]])
@@ -748,7 +605,7 @@ class SMN(Model):
             score = self.dot_set_score(x_rep)
 
    
-        elif self.mode=='poolingMA':  # pooling by multihead attention            
+        elif self.head_mode=='poolingMA':  # pooling by multihead attention            
             # create Seed Vector
             set_emb_tile = tf.tile(self.set_emb, [nSet,nSet,1,1])
             

@@ -10,7 +10,7 @@ import argparse
 import make_dataset as data
 #import save_image as image
 sys.path.insert(0, "../")
-#import models_point_nets as models
+import models as models
 
 from tensorflow.keras.optimizers import Adam
 import util
@@ -30,16 +30,12 @@ output_path = "output_images"  # 出力先ディレクトリ
 # get options
 parser = util.parser_run()
 args = parser.parse_args()
-# モジュールをインポート
-models = importlib.import_module("models")
 
-# インポートしたモジュールを使用
-print(f"Loaded module: {models.__name__}")
 # mode name
-mode = util.mode_name(args.mode)
-model_name = util.model_name(args.model)
-print(f"model: {model_name}")
-print(f"mode: {mode}")
+head_mode = util.head_mode_name(args.head_mode)
+backbone_mode_name = util.backbone_mode_name(args.backbone_mode)
+print(f"head_mode: {head_mode}")
+print(f"backbone_mode: {backbone_mode_name}")
 #max number of items
 max_item_num = 8
 test_cand_num = 5
@@ -99,23 +95,25 @@ if not os.path.exists(experimentPath):
     os.makedirs(experimentPath)
 
 # make set-to-set model path
-modelPath = os.path.join(experimentPath, f'{mode}_{args.baseChn}')
+modelPath = os.path.join(experimentPath, f'{head_mode}_{args.baseChn}')
 
-if args.is_mixer:
-    modelPath+=f'_mixer{args.item_perm_order}'
+if args.backbone_mode:
+    #modelPath+=f'_mixer'#{args.}
 
     if args.is_set_perm:
         modelPath+=f'_set_perm'
-        modelPath+=f'_models_{model_name}'
+        modelPath+=f'_{backbone_mode_name}'
+    else:
+        modelPath+=f'_{backbone_mode_name}'
 
 else:
     if args.is_set_norm:
         modelPath+=f'_setnorm'
-        modelPath+=f'_models_{model_name}'
+        modelPath+=f'_{backbone_mode_name}'
 
     if args.is_cross_norm:
         modelPath+=f'_crossnorm'
-        modelPath+=f'_models_{model_name}'
+        modelPath+=f'_{backbone_mode_name}'
 
 modelPath = os.path.join(modelPath,f"max_item_num{max_item_num}")
 modelPath = os.path.join(modelPath,f"layer{args.num_layers}")
@@ -150,18 +148,7 @@ test_batch_size = test_generator.batch_grp_num
 
 #----------------------------
 # set-matching network
-"""
-if args.model == 6:
-    print("Attention")
-    model = models.SMN(isCNN=False, is_final_linear=True, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
-elif args.model == 5:
-    print("DuMLP")
-    print("item_perm_order(isSoftmax):",args.item_perm_order)
-    model = models.SMN(isSoftMax=args.item_perm_order, max_item_num=max_item_num, hidden_dim=args.hidden_dim, isCNN=False, is_final_linear=True, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, is_neg_down_sample=is_neg_down_sample)
-else :#is_final_linear=false
-    model = models.SMN(is_mixer=args.is_mixer, max_item_num=max_item_num, item_perm_order=args.item_perm_order, is_set_perm=args.is_set_perm, isCNN=False, is_final_linear=True, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
-"""
-model = models.SMN(isSoftMax=args.isSoftMax, is_mixer=args.is_mixer, max_item_num=max_item_num, item_perm_order=args.item_perm_order, is_set_perm=args.is_set_perm, isCNN=False, is_final_linear=False, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
+model = models.SMN(is_SoftMax=args.is_SoftMax, backbone_mode=args.backbone_mode, max_item_num=max_item_num, is_set_perm=args.is_set_perm, isCNN=False, is_final_linear=False, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, head_mode=head_mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
 
 checkpoint_path = os.path.join(modelPath,"model/cp.ckpt")
 checkpoint_dir = os.path.dirname(checkpoint_path)
@@ -170,7 +157,7 @@ cp_earlystopping = tf.keras.callbacks.EarlyStopping(monitor='val_binary_accuracy
 result_path = os.path.join(modelPath,"result/result.pkl")
 #pdb.set_trace()
 
-if not os.path.exists(result_path):
+if not os.path.exists(result_path) or 1:
     #pdb.set_trace()
 
 
@@ -251,4 +238,5 @@ if not os.path.exists(test_loss_path) or 1:
         pickle.dump(test_loss,fp)
         pickle.dump(test_acc,fp)
         pickle.dump(cmcs,fp)
+    print("saving result:" + str(path))
 #---------------------------------

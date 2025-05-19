@@ -5,25 +5,25 @@ import os
 
 #----------------------------
 # model names
-def mode_name(mode):
-    mode_name = ['MLP','linearProj','maxPooling','poolingMA','CSS','setRepVec_biPMA','setRepVec_pivot','sumPooling','dumlp']
+def head_mode_name(head_mode):
+    head_mode_name = ['MLP','linearProj','maxPooling','poolingMA','CSS','setRepVec_biPMA','setRepVec_pivot','sumPooling','dumlp']
 
-    return mode_name[mode]
+    return head_mode_name[head_mode]
 #----------------------------
 # model names
-def model_name(model):
-    model_name = ['models_2','models_5','models_deep_sets','models_point_nets','models','models_dumlp','models_attention','models_sumpooling','models_pro']
+def backbone_mode_name(backbone_mode):
+    backbone_mode_name = ['attention','mixer']
 
-    return model_name[model]
+    return backbone_mode_name[backbone_mode]
 #----------------------------
 # parser for run.py
 def parser_run():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-mode', type=int, default=0, help='mode of computing set-matching score, MLP:0, linearProj:1, maxPooling:2, poolingMA:3, CSS:4,  setRepVec_biPMA:5, setRepVec_pivot:6, default:0')
+    parser.add_argument('-backbone_mode', type=int, default=1, help='mode of backbone-network, Attention:0, MLP-mixer:1')
+    parser.add_argument('-head_mode', type=int, default=0, help='mode of computing set-matching score, MLP:0, linearProj:1, maxPooling:2, poolingMA:3, CSS:4,  setRepVec_biPMA:5, setRepVec_pivot:6, default:0')
     parser.add_argument('-baseChn', type=int, default=32, help='number of base channel, default=32')
-    parser.add_argument('-num_layers', type=int, default=3, help='number of layers (attentions) in encoder and decoder, default=3')
-    parser.add_argument('-num_heads', type=int, default=5, help='number of heads in attention, default=5')
-    parser.add_argument('-is_mixer', type=int, default=1, help='switch of mixer (1:on, 0:off), default=1')
+    parser.add_argument('-num_layers', type=int, default=3, help='number of layers in encoder and decoder, default=3')
+    parser.add_argument('-num_heads', type=int, default=5, help='number of heads, default=5')
     parser.add_argument('-item_perm_order', type=int, default=0, help='order of Janossy pooling for items, default=0')    
     parser.add_argument('-is_residual', type=int, default=1, help='switch of 1st item mixer  (1:on, 0:off), default=1')
     parser.add_argument('-is_set_perm', type=int, default=1, help='switch of  (1:on, 0:off), default=1')
@@ -31,7 +31,7 @@ def parser_run():
     parser.add_argument('-is_cross_norm', type=int, default=1, help='switch of cross-normalization (1:on, 0:off), default=1')
     parser.add_argument('-trial', type=int, default=1, help='index of trial, default=1')
     parser.add_argument("-model", type=int, default="0", help="Import model module, janossy(mlp):0,janossy(dilat):1,deepsets:2.pointnets:3,attention:4")
-    parser.add_argument('-isSoftMax', type=int, default=0, help='switch of softmax (1:on, 0:off)')
+    parser.add_argument('-is_SoftMax', type=int, default=0, help='switch of softmax (1:on, 0:off)')
     parser.add_argument('-hidden_dim', type=int, default=128, help='number of units in MLP hidden-layer')
 
 
@@ -42,7 +42,8 @@ def parser_run():
 # parser for comp_results.py
 def parser_comp():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-modes', default='0', help='mode of computing set-matching score, MLP:0, linearProj:1, maxPooling:2, poolingMA:3, CSS:4,  setRepVec_biPMA:5, setRepVec_pivot:6, default:0')
+    parser.add_argument('-backbone_modes', type=int, default=1, help='mode of backbone-network, Attention:0, MLP-mixer:1')
+    parser.add_argument('-head_modes', default='0', help='mode of computing set-matching score, MLP:0, linearProj:1, maxPooling:2, poolingMA:3, CSS:4,  setRepVec_biPMA:5, setRepVec_pivot:6, default:0')
     parser.add_argument('-baseChn', type=int, default=32, help='number of base channel, default=32')
     parser.add_argument('-num_layers', default='1,3,5', help='number of layers (attentions) in encoder and decoder, default=3')
     parser.add_argument('-num_heads', default='16,64', help='number of heads in attention, default=5')#'3,5''16,64,128'
