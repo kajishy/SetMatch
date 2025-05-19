@@ -30,15 +30,16 @@ output_path = "output_images"  # 出力先ディレクトリ
 # get options
 parser = util.parser_run()
 args = parser.parse_args()
-# 動的にモジュールをインポート
-model_name = util.model_name(args.model)
-models = importlib.import_module(model_name)
+# モジュールをインポート
+models = importlib.import_module("models")
 
 # インポートしたモジュールを使用
 print(f"Loaded module: {models.__name__}")
 # mode name
 mode = util.mode_name(args.mode)
 model_name = util.model_name(args.model)
+print(f"model: {model_name}")
+print(f"mode: {mode}")
 #max number of items
 max_item_num = 8
 test_cand_num = 5
@@ -149,6 +150,7 @@ test_batch_size = test_generator.batch_grp_num
 
 #----------------------------
 # set-matching network
+"""
 if args.model == 6:
     print("Attention")
     model = models.SMN(isCNN=False, is_final_linear=True, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
@@ -158,6 +160,8 @@ elif args.model == 5:
     model = models.SMN(isSoftMax=args.item_perm_order, max_item_num=max_item_num, hidden_dim=args.hidden_dim, isCNN=False, is_final_linear=True, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, is_neg_down_sample=is_neg_down_sample)
 else :#is_final_linear=false
     model = models.SMN(is_mixer=args.is_mixer, max_item_num=max_item_num, item_perm_order=args.item_perm_order, is_set_perm=args.is_set_perm, isCNN=False, is_final_linear=True, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
+"""
+model = models.SMN(is_mixer=args.is_mixer, max_item_num=max_item_num, item_perm_order=args.item_perm_order, is_set_perm=args.is_set_perm, isCNN=False, is_final_linear=False, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, mode=mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
 
 checkpoint_path = os.path.join(modelPath,"model/cp.ckpt")
 checkpoint_dir = os.path.dirname(checkpoint_path)
@@ -166,7 +170,7 @@ cp_earlystopping = tf.keras.callbacks.EarlyStopping(monitor='val_binary_accuracy
 result_path = os.path.join(modelPath,"result/result.pkl")
 #pdb.set_trace()
 
-if not os.path.exists(result_path) or 1:
+if not os.path.exists(result_path):
     #pdb.set_trace()
 
 
@@ -233,7 +237,7 @@ if not os.path.exists(test_loss_path) or 1:
     image.visualize_batches(predSMN,id_test,set_id,model_id,image_folder,scene_folder, "output_images/4_17")
     """
     #total_time = np.sum(elapsed_time)
-    model.summary()
+    #model.summary()
 
     with open(test_loss_path,'w') as fp:
         fp.write('test loss:' + str(test_loss) + '\n')
