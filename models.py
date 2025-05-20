@@ -526,8 +526,8 @@ class SMN(Model):
                 if self.head_mode.find('setRepVec') > -1:
                     self.cross_attentions[i].rep_vec_num = self.rep_vec_num            
 
-                    if self.backbone_mode == 2: # Bi-PMA + pivot-cross
-                        self.cross_attentions[i].pivot_cross = True
+                if self.head_mode == 'setRepVec_pivot': # Bi-PMA + pivot-cross
+                    self.cross_attentions[i].pivot_cross = True
 
                 z = self.layer_norms_dec1[i](x,x_size)
 

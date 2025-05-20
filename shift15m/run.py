@@ -1,0 +1,210 @@
+import tensorflow as tf
+import matplotlib.pylab as plt
+import os
+import numpy as np
+import pdb
+import copy
+import pickle
+import sys
+import argparse
+import make_dataset as data
+sys.path.insert(0, "../")
+import models as models
+
+from tensorflow.keras.optimizers import Adam
+import util
+
+import pdb
+import time
+import importlib
+#----------------------------
+# set parameters
+
+# get options
+parser = util.parser_run()
+args = parser.parse_args()
+
+# mode name
+head_mode = util.head_mode_name(args.head_mode)
+backbone_mode_name = util.backbone_mode_name(args.backbone_mode)
+print(f"head_mode: {head_mode}")
+print(f"backbone_mode: {backbone_mode_name}")
+# year of data and max number of items
+year = 2017
+max_item_num = 5
+test_cand_num = 5
+#max_data_num = 10000
+
+# number of epochs
+epochs = 100
+
+# early stoppoing parameter
+patience = 3
+
+# batch size
+batch_size = 20
+
+# number of representive vectors
+rep_vec_num = 1
+
+# negative down sampling
+is_neg_down_sample = True
+
+# set random seed
+os.environ['TF_DETERMINISTIC_OPS'] = '1'
+np.random.seed(args.trial)
+tf.random.set_seed(args.trial)
+"""
+# memory growth
+physical_devices = tf.config.list_physical_devices('GPU')
+if len(physical_devices) > 0:
+    ""
+    for device in physical_devices:
+        tf.config.experimental.set_memory_growth(device[0], True)
+        print('{} memory growth: {}'.format(device, tf.config.experimental.get_memory_growth(device)))
+    ""
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    print('{} memory growth: {}'.format(physical_devices[0], tf.config.experimental.get_memory_growth(physical_devices[0])))
+else:
+    print("Not enough GPU hardware devices available")
+"""
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        tf.config.set_visible_devices(gpus[1], 'GPU')
+        tf.config.experimental.set_memory_growth(gpus[1], True)
+        print('{} memory growth: {}'.format(gpus[1], tf.config.experimental.get_memory_growth(gpus[1])))
+    except RuntimeError as e:
+        print(e)
+#----------------------------
+
+#----------------------------
+# make Path
+
+# make experiment path containing CNN and set-to-set model
+experimentPath = 'experiment'
+if not os.path.exists(experimentPath):
+    os.makedirs(experimentPath)
+
+# make set-to-set model path
+modelPath = os.path.join(experimentPath, f'{head_mode}_{args.baseChn}')
+
+if args.backbone_mode:
+    #modelPath+=f'_mixer'#{args.}
+
+    if args.is_set_perm:
+        modelPath+=f'_set_perm'
+    if args.is_SoftMax:
+        modelPath+=f'_softmax'
+        modelPath+=f'_{backbone_mode_name}'
+    else:
+        modelPath+=f'_{backbone_mode_name}'
+
+else:
+    if args.is_set_norm:
+        modelPath+=f'_setnorm'
+        modelPath+=f'_{backbone_mode_name}'
+
+    if args.is_cross_norm:
+        modelPath+=f'_crossnorm'
+        modelPath+=f'_{backbone_mode_name}'
+
+modelPath = os.path.join(modelPath,f"year{year}")
+modelPath = os.path.join(modelPath,f"max_item_num{max_item_num}")
+modelPath = os.path.join(modelPath,f"layer{args.num_layers}")
+modelPath = os.path.join(modelPath,f"num_head{args.num_heads}")
+modelPath = os.path.join(modelPath,f"{args.trial}")
+if not os.path.exists(modelPath):
+    path = os.path.join(modelPath,'model')
+    os.makedirs(path)
+
+    path = os.path.join(modelPath,'result')
+    os.makedirs(path)
+#----------------------------
+
+#----------------------------
+# make data
+train_generator = data.trainDataGenerator(year=year, batch_size=batch_size, max_item_num=max_item_num)
+x_valid, x_size_valid, y_valid = train_generator.data_generation_val()
+
+# set data generator for test
+test_generator = data.testDataGenerator(year=year, cand_num=test_cand_num)
+x_test = test_generator.x
+x_size_test = test_generator.x_size
+y_test = test_generator.y
+test_batch_size = test_generator.batch_grp_num
+#pdb.set_trace()
+#----------------------------
+#-----------------------------------------------------------------------
+
+#----------------------------
+# set-matching network
+model = models.SMN(is_SoftMax=args.is_SoftMax, backbone_mode=args.backbone_mode, max_item_num=max_item_num, is_set_perm=args.is_set_perm, isCNN=False, is_final_linear=False, is_set_norm=args.is_set_norm, is_cross_norm=args.is_cross_norm, num_layers=args.num_layers, num_heads=args.num_heads, baseChn=args.baseChn, head_mode=head_mode, rep_vec_num=rep_vec_num, is_neg_down_sample=is_neg_down_sample)
+
+checkpoint_path = os.path.join(modelPath,"model/cp.ckpt")
+checkpoint_dir = os.path.dirname(checkpoint_path)
+cp_callback = tf.keras.callbacks.ModelCheckpoint(checkpoint_path, monitor='val_binary_accuracy', save_weights_only=True, mode='max', save_best_only=True, save_freq='epoch', verbose=1)
+cp_earlystopping = tf.keras.callbacks.EarlyStopping(monitor='val_binary_accuracy', patience=patience, mode='max', min_delta=0.001, verbose=1)
+result_path = os.path.join(modelPath,"result/result.pkl")
+
+if not os.path.exists(result_path) or 1:
+    #pdb.set_trace()
+
+
+    # setting training, loss, metric to model
+    optimizer = Adam(learning_rate=0.001)#0.002, clipnorm=1.0
+    model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['binary_accuracy'], run_eagerly=True)#"adam"
+    
+    # execute training
+    history = model.fit(train_generator, epochs=epochs, validation_data=((x_valid, x_size_valid), y_valid),
+        shuffle=True, callbacks=[cp_callback,cp_earlystopping])#gradient_logger,
+
+    # accuracy and loss
+    acc = history.history['binary_accuracy']
+    val_acc = history.history['val_binary_accuracy']
+    loss = history.history['loss']
+    val_loss = history.history['val_loss']
+
+    # plot loss & acc
+    util.plotLossACC(modelPath,loss,val_loss,acc,val_acc)
+
+    # dump to pickle
+    with open(result_path,'wb') as fp:
+        pickle.dump(acc,fp)
+        pickle.dump(val_acc,fp)
+        pickle.dump(loss,fp)
+        pickle.dump(val_loss,fp)
+else:
+    # load trained parameters
+    print("load models")
+    model.load_weights(checkpoint_path)
+#----------------------------
+
+#---------------------------------
+# calc test loss and accuracy, and save to pickle
+test_loss_path = os.path.join(modelPath, "result/test_loss_acc.txt")
+if not os.path.exists(test_loss_path):
+    model.compile(optimizer='adam',loss='binary_crossentropy',metrics=['binary_accuracy'],run_eagerly=True)
+    test_loss, test_acc = model.evaluate((x_test,x_size_test),y_test,batch_size=test_batch_size,verbose=0)
+
+    # compute cmc
+    _, predSMN, _ , elapsed_time= model.predict((x_test, x_size_test), batch_size=test_batch_size, verbose=1)
+    cmcs = util.calc_cmcs(predSMN, y_test, batch_size=test_batch_size)
+
+    average_time = np.mean(elapsed_time)
+    #total_time = np.sum(elapsed_time)
+
+    with open(test_loss_path,'w') as fp:
+        fp.write('test loss:' + str(test_loss) + '\n')
+        fp.write('test accuracy:' + str(test_acc) + '\n')
+        fp.write('average time:' + str(average_time) + '\n')
+        #fp.write('total time:' + str(total_time) + '\n')
+        fp.write('test cmc:' + str(cmcs) + '\n')
+
+    path = os.path.join(modelPath, "result/test_loss_acc.pkl")
+    with open(path,'wb') as fp:
+        pickle.dump(test_loss,fp)
+        pickle.dump(test_acc,fp)
+        pickle.dump(cmcs,fp)
+    print("saving result:" + str(path))
+#---------------------------------
