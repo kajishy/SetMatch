@@ -6,13 +6,13 @@ import os
 #----------------------------
 # model names
 def head_mode_name(head_mode):
-    head_mode_name = ['MLP','linearProj','maxPooling','poolingMA','CSS','setRepVec_biPMA','setRepVec_pivot','sumPooling','dumlp']
+    head_mode_name = ['MLP','linearProj','maxPooling','poolingMA','CSS','setRepVec','sumPooling','dumlp']
 
     return head_mode_name[head_mode]
 #----------------------------
 # model names
 def backbone_mode_name(backbone_mode):
-    backbone_mode_name = ['attention','mixer']
+    backbone_mode_name = ['attention','mixer','pivot']
 
     return backbone_mode_name[backbone_mode]
 #----------------------------

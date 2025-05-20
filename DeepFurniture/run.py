@@ -102,6 +102,8 @@ if args.backbone_mode:
 
     if args.is_set_perm:
         modelPath+=f'_set_perm'
+    if args.is_SoftMax:
+        modelPath+=f'_softmax'
         modelPath+=f'_{backbone_mode_name}'
     else:
         modelPath+=f'_{backbone_mode_name}'
