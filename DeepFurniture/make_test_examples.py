@@ -7,6 +7,7 @@ import pathlib
 import tqdm
 from typing import Any, Dict, List, Optional, Tuple, Union
 import os
+import pdb
 
 def convert_ndarray_to_list(obj):
     if isinstance(obj, np.ndarray):
@@ -52,6 +53,7 @@ def make_test_examples(
 
             xy_mask = [True] * (len(items) - y_size) + [False] * y_size
             xy_mask = np.random.permutation(xy_mask)
+
             setX_items.extend(items[xy_mask].tolist())
             setY_items.extend(items[~xy_mask].tolist())
             setX_ids.extend(ids[xy_mask].tolist())
@@ -85,13 +87,15 @@ def make_test_examples(
                 items = items[perm_indices]
                 ids = ids[perm_indices]
                 y_size = len(items) // 2
-                setY_items.append(items[:y_size])
-                setY_ids.append(ids[:y_size])
+                #pdb.set_trace()
+                setY_items.append(items[:y_size].tolist())
+                setY_ids.append(ids[:y_size].tolist())
 
                 setY_set_ids.append(test_y[k])
-            answers.append(setY_items)
-            answers_set_images_ids.append(setY_ids)
-            answers_set_ids.append(setY_set_ids)
+            #pdb.set_trace()
+            answers.extend(setY_items)
+            answers_set_images_ids.extend(setY_ids)
+            answers_set_ids.extend(setY_set_ids)
 
         example["answers"] = answers
         example["answers_set_images_ids"] = answers_set_images_ids
