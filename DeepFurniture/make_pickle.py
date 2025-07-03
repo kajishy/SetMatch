@@ -23,7 +23,7 @@ def load_data(path):
         data = pickle.load(f)
     return data
 
-def split_collections(data, train_ratio=0.8, valid_ratio=0.1, seed=0, min_size=4, max_size=16):
+def split_collections(data, train_ratio=0.8, valid_ratio=0.1, seed=0, min_size=4, max_size=16, remove_duplicates=True):
     """
     data は各集合の名前をキーとする辞書とする。
     各集合は {'features': (n,4096), 'category_ids': (n,), ...} の構造を持つ。
@@ -36,11 +36,35 @@ def split_collections(data, train_ratio=0.8, valid_ratio=0.1, seed=0, min_size=4
       valid_x, valid_y, valid_z: 検証用集合のリスト
       test_x,  test_y,  test_z : テスト用集合のリスト
     """
+    cleaned_data = {}
+    for name, coll in data.items():
+        features = np.array(coll['features'])         # (n, 4096)
+        category_ids = np.array(coll['category_ids']) # (n,)
+        item_ids = np.array(coll['item_ids'])         # (n,)
+
+        if remove_duplicates:
+            # item_id ごとに重複を除く
+            _, unique_indices = np.unique(item_ids, return_index=True)
+            unique_features = features[unique_indices]
+            unique_category_ids = category_ids[unique_indices]
+            unique_item_ids = item_ids[unique_indices]
+
+            # ログ出力
+            #print(f"[{name}] original: {len(item_ids)} → unique: {len(unique_item_ids)}")
+        else:
+            unique_features = features
+            unique_category_ids = category_ids
+            unique_item_ids = item_ids
+
+        # min_size/max_size によるフィルタ
+        if min_size <= len(unique_item_ids) <= max_size:
+            cleaned_data[name] = {
+                'features': unique_features,
+                'category_ids': unique_category_ids,
+                'item_ids': unique_item_ids
+            }
     # data のキー（集合名）をリスト化し、シャッフル
-    #collection_names = list(data.keys())
-    # 指定したサイズ範囲にある集合のみを取得
-    #pdb.set_trace()
-    collection_names = [name for name in data.keys() if min_size <= len(data[name]['features']) <= max_size]
+    collection_names = list(cleaned_data.keys())
     rng = np.random.default_rng(seed)
     rng.shuffle(collection_names)
     
@@ -59,7 +83,7 @@ def split_collections(data, train_ratio=0.8, valid_ratio=0.1, seed=0, min_size=4
     
     # 各集合ごとに、features, category_ids を抽出し、y は集合名の配列として用意
     for name in train_names:
-        coll = data[name]
+        coll = cleaned_data[name]
         features = np.array(coll['features'])       # (n, 4096)
         category_ids = np.array(coll['category_ids']) # (n,)
         item_ids = np.array(coll['item_ids'])
@@ -69,7 +93,7 @@ def split_collections(data, train_ratio=0.8, valid_ratio=0.1, seed=0, min_size=4
         train_id.append(item_ids)
         
     for name in valid_names:
-        coll = data[name]
+        coll = cleaned_data[name]
         features = np.array(coll['features'])
         category_ids = np.array(coll['category_ids'])
         item_ids = np.array(coll['item_ids'])
@@ -79,7 +103,7 @@ def split_collections(data, train_ratio=0.8, valid_ratio=0.1, seed=0, min_size=4
         valid_id.append(item_ids)
         
     for name in test_names:
-        coll = data[name]
+        coll = cleaned_data[name]
         features = np.array(coll['features'])
         category_ids = np.array(coll['category_ids'])
         item_ids = np.array(coll['item_ids'])
