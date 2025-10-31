@@ -37,6 +37,7 @@ def split_collections(data, train_ratio=0.8, valid_ratio=0.1, seed=0, min_size=4
       test_x,  test_y,  test_z : テスト用集合のリスト
     """
     cleaned_data = {}
+    seen_item_sets = {}
     for name, coll in data.items():
         features = np.array(coll['features'])         # (n, 4096)
         category_ids = np.array(coll['category_ids']) # (n,)
@@ -50,11 +51,50 @@ def split_collections(data, train_ratio=0.8, valid_ratio=0.1, seed=0, min_size=4
             unique_item_ids = item_ids[unique_indices]
 
             # ログ出力
-            #print(f"[{name}] original: {len(item_ids)} → unique: {len(unique_item_ids)}")
+            print(f"[{name}] original: {len(item_ids)} → unique: {len(unique_item_ids)}")
         else:
             unique_features = features
             unique_category_ids = category_ids
             unique_item_ids = item_ids
+
+        # 集合化（順序を無視）
+        item_set = set(unique_item_ids.tolist())
+        remove_current = False
+        sets_to_remove = []
+
+        for existing_key, existing_name in list(seen_item_sets.items()):
+            existing_set = set(existing_key)
+
+            if item_set == existing_set:
+                # 完全一致 → 新しい方をスキップ
+                print(f"Skipping duplicate collection: {name} (duplicate of {existing_name})")
+                remove_current = True
+                break
+
+            elif item_set < existing_set:
+                # 新しい方が既存の部分集合 → 新しい方をスキップ
+                print(f"Skipping subset collection: {name} (subset of {existing_name})")
+                remove_current = True
+                break
+
+            elif existing_set < item_set:
+                # 既存が新しい方の部分集合 → 既存を削除
+                print(f"Replacing {existing_name} with superset {name}")
+                sets_to_remove.append(existing_key)
+
+        if remove_current:
+            continue
+
+        # 部分集合だった既存を削除
+        for key in sets_to_remove:
+            old_name = seen_item_sets[key]
+            del seen_item_sets[key]
+            if old_name in cleaned_data:
+                del cleaned_data[old_name]
+
+        # 新しい集合を登録
+        item_set_key = tuple(sorted(item_set))
+        seen_item_sets[item_set_key] = name
 
         # min_size/max_size によるフィルタ
         if min_size <= len(unique_item_ids) <= max_size:

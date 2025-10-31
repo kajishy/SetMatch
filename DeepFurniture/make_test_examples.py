@@ -7,6 +7,7 @@ import pathlib
 import tqdm
 from typing import Any, Dict, List, Optional, Tuple, Union
 import os
+import pdb
 
 def convert_ndarray_to_list(obj):
     if isinstance(obj, np.ndarray):
@@ -26,12 +27,16 @@ def make_test_examples(
     n_comb: int = 1, 
     n_cands: int = 4,
     seed: int = 0,
+    mode: str = "equal",          # "equal", "random_split", "random_missing"
+    missing_rate: float = 0.3,    # ランダム欠損の割合
+    max_item_num = 8,
 ):
-    print("Make test dataset.")
+    print(f"Make test dataset. mode={mode}")
     test, test_y, test_z, test_id = test_all
     np.random.seed(seed)
 
     test_examples = []
+    #pdb.set_trace()
     for i in range(len(test)):
         example = {}
 
@@ -39,72 +44,140 @@ def make_test_examples(
         others = np.random.choice(lst, n_comb - 1, replace=False).tolist()
         target = [i] + others
 
-        setX_items, setY_items = [], []
-        setX_ids, setY_ids = [], [] #image id
-        query_set_ids = [] #scene id
-        for j in target:
-            #items = [str(item["item_id"]) for item in test[j]["items"]]
-            items = test[j]
-            #items = np.array(items)
-            ids = test_id[j]
+        items = test[i]
+        ids = test_id[i]
 
+        if mode == "equal":
+            # ===== 等分モード =====
             y_size = len(items) // 2
-
             xy_mask = [True] * (len(items) - y_size) + [False] * y_size
             xy_mask = np.random.permutation(xy_mask)
-            setX_items.extend(items[xy_mask].tolist())
-            setY_items.extend(items[~xy_mask].tolist())
-            setX_ids.extend(ids[xy_mask].tolist())
-            setY_ids.extend(ids[~xy_mask].tolist())
-            #query_set_ids.append(test[j]["set_id"])
-            query_set_ids.append(test_y[j])
 
-        example["query"] = setX_items
-        example["query_set_ids"] = query_set_ids
-        example["query_set_images_ids"] = setX_ids
+            setX_items = items[xy_mask].tolist()
+            setY_items = items[~xy_mask].tolist()
+            setX_ids   = ids[xy_mask].tolist()
+            setY_ids   = ids[~xy_mask].tolist()
 
-        answers = [setY_items]
-        answers_set_images_ids = [setY_ids]
-        answers_set_ids = [query_set_ids]
-        for j in range(n_cands - 1):
-            lst = np.delete(np.arange(len(test)), target)
-            negatives = np.random.choice(lst, n_comb, replace=False).tolist()
-            assert len(set(target) & set(negatives)) == 0
-            target += negatives  # avoid double-selecting
+            query_set_ids = [test_y[i]]
 
-            setY_items = []
-            setY_ids = [] #image id
-            setY_set_ids = [] #scene id
-            for k in negatives:
-                #items = [str(item["item_id"])for item in test[k]["items"]]
-                items = test[k]
-                ids = test_id[k]
+            example = {
+                "query": setX_items,
+                "query_set_ids": query_set_ids,
+                "query_set_images_ids": setX_ids,
+            }
 
-                # インデックスを使って画像とIDを同じ順序で並び替える
-                perm_indices = np.random.permutation(items.shape[0])
-                items = items[perm_indices]
-                ids = ids[perm_indices]
-                y_size = len(items) // 2
-                setY_items.append(items[:y_size])
-                setY_ids.append(ids[:y_size])
+            # ===== ネガティブ候補生成 =====
+            answers = [setY_items]
+            answers_set_images_ids = [setY_ids]
+            answers_set_ids = [query_set_ids]
 
-                setY_set_ids.append(test_y[k])
-            answers.extend(setY_items)
-            answers_set_images_ids.extend(setY_ids)
-            answers_set_ids.extend(setY_set_ids)
+            for k in range(n_cands - 1):
+                lst = np.delete(np.arange(len(test)), target)
+                negatives = np.random.choice(lst, n_comb, replace=False).tolist()
+                assert len(set(target) & set(negatives)) == 0
+                target += negatives  # avoid double-selecting
 
-        example["answers"] = answers
-        example["answers_set_images_ids"] = answers_set_images_ids
-        example["answers_set_ids"] = answers_set_ids
+                setY_items = []
+                setY_ids = []
+                setY_set_ids = []
+                for neg in negatives:
+                    neg_items = test[neg]
+                    neg_ids = test_id[neg]
+                    perm_indices = np.random.permutation(neg_items.shape[0])
+                    neg_items = neg_items[perm_indices]
+                    neg_ids = neg_ids[perm_indices]
+                    y_size = len(neg_items) // 2
+                    setY_items.append(neg_items[:y_size])
+                    setY_ids.append(neg_ids[:y_size])
+                    setY_set_ids.append(test_y[neg])
 
-        test_examples.append(example)
+                answers.extend(setY_items)
+                answers_set_images_ids.extend(setY_ids)
+                answers_set_ids.extend(setY_set_ids)
 
-    with open(
-        path / f"test_examples_ncomb_{n_comb}_ncands_{n_cands}.json", "w"
-    ) as f:
+            example["answers"] = answers
+            example["answers_set_images_ids"] = answers_set_images_ids
+            example["answers_set_ids"] = answers_set_ids
+
+            test_examples.append(example)
+
+        elif mode == "ratio":
+            # ===== 比率モード =====
+            n = len(items)
+            ratios = [(0.3,0.7),(0.7,0.3),(0.4,0.6),(0.6,0.4),(0.5,0.5)]
+            seen_splits = set()  # 重複防止
+
+            for r1, r2 in ratios:
+                s1 = round(n * r1)
+                s2 = n - s1
+                if s1 < 2 or s2 < 2:
+                    continue
+                #split = tuple(sorted([s1, s2]))
+                split = (s1, s2) 
+                if split in seen_splits:
+                    continue
+                seen_splits.add(split)
+
+                xy_mask = [True] * s1 + [False] * s2
+                xy_mask = np.random.permutation(xy_mask)
+
+                setX_items = items[xy_mask].tolist()
+                setY_items = items[~xy_mask].tolist()
+                setX_ids   = ids[xy_mask].tolist()
+                setY_ids   = ids[~xy_mask].tolist()
+
+                query_set_ids = [test_y[i]]
+
+                example = {
+                    "query": setX_items,
+                    "query_set_ids": query_set_ids,
+                    "query_set_images_ids": setX_ids,
+                }
+
+                # ===== ネガティブ候補生成 =====
+                answers = [setY_items]
+                answers_set_images_ids = [setY_ids]
+                answers_set_ids = [query_set_ids]
+
+                for k in range(n_cands - 1):
+                    lst = np.delete(np.arange(len(test)), target)
+                    negatives = np.random.choice(lst, n_comb, replace=False).tolist()
+                    target += negatives
+
+                    setY_items = []
+                    setY_ids = []
+                    setY_set_ids = []
+                    for neg in negatives:
+                        neg_items = test[neg]
+                        neg_ids = test_id[neg]
+                        perm_indices = np.random.permutation(neg_items.shape[0])
+                        neg_items = neg_items[perm_indices]
+                        neg_ids = neg_ids[perm_indices]
+                        y_size = len(neg_items) // 2
+                        setY_items.append(neg_items[:y_size])
+                        setY_ids.append(neg_ids[:y_size])
+                        setY_set_ids.append(test_y[neg])
+
+                    answers.extend(setY_items)
+                    answers_set_images_ids.extend(setY_ids)
+                    answers_set_ids.extend(setY_set_ids)
+
+                example["answers"] = answers
+                example["answers_set_images_ids"] = answers_set_images_ids
+                example["answers_set_ids"] = answers_set_ids
+
+                test_examples.append(example)
+
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+
+        
+    # ファイル名にモードを追加
+    json_name = f"test_examples_{mode}_ncomb_{n_comb}_ncands_{n_cands}_itemmax_{max_item_num}"
+    with open(path / f"{json_name}.json", "w") as f:
         json.dump(convert_ndarray_to_list(test_examples), f, indent=2)
 
-    return f"test_examples_ncomb_{n_comb}_ncands_{n_cands}"
+    return json_name
 
 
 def save_test_examples(
@@ -126,10 +199,11 @@ def save_test_examples(
         example_features = [query_features, gallery_features]
         example_ids = [query_ids, gallery_ids]
         example_id = example["query_set_ids"][0]
-        with open(output_dir / f"{example_id}.pkl", "wb") as f:
+        with open(output_dir / f"{example_id}_{i}.pkl", "wb") as f:
             pickle.dump(example_features, f)
             pickle.dump(example_ids, f)
             pickle.dump(example_id, f)
+            pickle.dump(example_id, f)  # ここはシーンIDのみ
 
     assert len(glob.glob(str(output_dir / "*"))) == len(test_examples), "unmatched case"
 
@@ -137,6 +211,26 @@ def save_test_examples(
 
 
 def main(args):
+    split_count_by_n = {}
+
+    for n in range(4, 17):
+        items = np.arange(n)
+        ids = np.arange(n)
+        seen_splits = set()
+        for r1, r2 in [(0.3,0.7),(0.7,0.3),(0.4,0.6),(0.6,0.4),(0.5,0.5)]:
+            s1 = round(n * r1)
+            s2 = n - s1
+            if s1 < 2 or s2 < 2:
+                continue
+            split = (s1, s2)
+            if split in seen_splits:
+                continue
+            seen_splits.add(split)
+        print(n,":",seen_splits)
+        split_count_by_n[n] = len(seen_splits)
+
+    print(split_count_by_n)
+    #return
     # dataset
     label_dir = "pickle_data"
     test_pkl = os.path.join(label_dir, "test.pkl")
@@ -149,7 +243,16 @@ def main(args):
     output_root = pathlib.Path(args.data_root)
     output_root.mkdir(parents=True, exist_ok=True)
     print("saving a json file to " + str(output_root))
-    json_name = make_test_examples((test_x, test_y, test_z, test_id), path=output_root, n_comb=1, n_cands=args.n_cands, seed=args.split)
+    json_name = make_test_examples(
+            (test_x, test_y, test_z, test_id), 
+            path=output_root, 
+            n_comb=1, 
+            n_cands=args.n_cands, 
+            seed=args.split,
+            mode=args.mode,
+            missing_rate=args.missing_rate,
+            max_item_num=args.max_item_num,
+        )
     json_path = output_root /  f"{json_name}.json" 
     print("saved: " + str(json_path))
 
@@ -166,7 +269,9 @@ if __name__ == "__main__":
     parser.add_argument("--split", type=int, choices=[0, 1, 2], default=0)
     parser.add_argument("--data_root", type=str, default="json_data")
     parser.add_argument("--n_cands", "-c", type=int, default=5)
-
+    parser.add_argument("--mode", type=str, choices=["equal", "ratio"], default="equal")
+    parser.add_argument("--missing_rate", type=float, default=0.0)
+    parser.add_argument("--max_item_num", type=int, default=8)
     args = parser.parse_args()
 
     main(args)
